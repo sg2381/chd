@@ -25,7 +25,7 @@ SEARCH_TERMS = [
 
 # Configure Google Gemini
 genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel('gemini-pro')
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 DB_NAME = "chd_intelligence.db"
 
@@ -79,8 +79,13 @@ def analyze_article(title, snippet):
             return None
         return answer
     except Exception as e:
-        print(f"Gemini Error: {e}")
-        return None
+    print(f"Gemini Error: {e}")
+    # DEBUG: If model isn't found, print what IS available
+    if "404" in str(e):
+        print("Listing available models...")
+        for m in genai.list_models():
+            print(m.name)
+    return None
 
 # --- PART 3: THE REPORTER (EMAIL) ---
 def send_email(new_leads):
