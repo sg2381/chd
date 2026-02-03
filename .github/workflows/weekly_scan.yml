@@ -1,0 +1,43 @@
+name: Weekly CHD Scout
+
+on:
+  schedule:
+    # Run at 09:00 AM every Monday
+    - cron: '0 9 * * 1'
+  workflow_dispatch: # Allows you to run it manually to test
+
+permissions:
+  contents: write
+
+jobs:
+  run_scout:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Scout Script
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_RECEIVER: ${{ secrets.EMAIL_SENDER }} # Sends to yourself
+        run: python chd_scout.py
+
+      - name: Commit and Push Database Updates
+        run: |
+          git config --global user.name "CHD Bot"
+          git config --global user.email "bot@noreply.github.com"
+          git add chd_intelligence.db
+          # Only commit if the database actually changed
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update database with new findings" && git push)
