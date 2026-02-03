@@ -25,7 +25,7 @@ SEARCH_TERMS = [
 
 # Configure Google Gemini
 genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-pro')
 
 DB_NAME = "chd_intelligence.db"
 
