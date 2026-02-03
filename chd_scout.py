@@ -3,19 +3,18 @@ import feedparser
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from openai import OpenAI
+import google.generativeai as genai
 import datetime
 import time
-import os # Make sure this is imported at the top
+import os
 
 # --- CONFIGURATION ---
 # We use os.environ.get to pull the secrets from GitHub
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 EMAIL_SENDER = os.environ.get("EMAIL_SENDER")
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
-EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER") # Or hardcode your email string here
+EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER") 
 
-# The specific terms we are hunting for
 SEARCH_TERMS = [
     "Congenital Heart Disease launch", 
     "Congenital Heart Disease partnership",
@@ -24,14 +23,16 @@ SEARCH_TERMS = [
     "CHD non-profit announced"
 ]
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+# Configure Google Gemini
+genai.configure(api_key=GOOGLE_API_KEY)
+model = genai.GenerativeModel('gemini-1.5-flash')
+
 DB_NAME = "chd_intelligence.db"
 
 # --- PART 1: THE DATABASE ---
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    # We store the link to ensure we never email you the same story twice
     c.execute('''CREATE TABLE IF NOT EXISTS seen_articles 
                  (link TEXT PRIMARY KEY, title TEXT, date_added TEXT)''')
     conn.commit()
@@ -53,12 +54,8 @@ def save_article(link, title):
     conn.commit()
     conn.close()
 
-# --- PART 2: THE INTELLIGENCE (AI) ---
+# --- PART 2: THE INTELLIGENCE (GOOGLE GEMINI) ---
 def analyze_article(title, snippet):
-    """
-    Asks AI: Is this a new organization/program?
-    Returns: A short summary if YES, or None if NO.
-    """
     prompt = f"""
     I am an investor looking for NEW organizations, foundations, alliances, or startups in the Congenital Heart Disease space.
     
@@ -75,17 +72,14 @@ def analyze_article(title, snippet):
     """
     
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini", # Cheap and fast
-            messages=[{"role": "user", "content": prompt}]
-        )
-        answer = response.choices[0].message.content.strip()
+        response = model.generate_content(prompt)
+        answer = response.text.strip()
         
         if answer == "NO" or "NO." in answer:
             return None
-        return answer # Returns the 1-sentence summary
+        return answer
     except Exception as e:
-        print(f"AI Error: {e}")
+        print(f"Gemini Error: {e}")
         return None
 
 # --- PART 3: THE REPORTER (EMAIL) ---
@@ -95,7 +89,6 @@ def send_email(new_leads):
 
     subject = f"CHD Investment Scout: {len(new_leads)} New Opportunities Found"
     
-    # Build HTML body
     body_html = "<h2>Weekly CHD Intelligence Report</h2>"
     body_html += "<p>The following new organizations or programs were detected:</p><hr>"
     
@@ -126,7 +119,6 @@ def run_scan():
     new_leads = []
 
     for term in SEARCH_TERMS:
-        # Use Google News RSS
         formatted_term = term.replace(" ", "%20")
         rss_url = f"https://news.google.com/rss/search?q={formatted_term}&hl=en-US&gl=US&ceid=US:en"
         feed = feedparser.parse(rss_url)
@@ -135,7 +127,10 @@ def run_scan():
 
         for entry in feed.entries:
             if not article_exists(entry.link):
-                # We haven't seen this before. Ask AI.
+                # We haven't seen this before. Ask Gemini.
+                # Introduce a small delay so Google doesn't think we are spamming
+                time.sleep(1) 
+                
                 summary = analyze_article(entry.title, entry.summary if 'summary' in entry else "")
                 
                 if summary:
@@ -148,7 +143,6 @@ def run_scan():
                 else:
                     print(f"[SKIP] {entry.title}")
                 
-                # Save to DB so we don't check it again next week
                 save_article(entry.link, entry.title)
     
     if new_leads:
