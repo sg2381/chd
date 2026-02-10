@@ -150,6 +150,12 @@ def run_scan():
                 
                 save_article(entry.link, entry.title)
     
+    new_leads.append({
+        "title": "TEST: The Iron Man Heart Foundation",
+        "link": "https://google.com",
+        "summary": "This is a fake test summary. If you see this, your CHD Scout is fully operational!"
+    })
+    
     if new_leads:
         send_email(new_leads)
     else:
