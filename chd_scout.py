@@ -134,7 +134,7 @@ def run_scan():
             if not article_exists(entry.link):
                 # We haven't seen this before. Ask Gemini.
                 # Introduce a small delay so Google doesn't think we are spamming
-                time.sleep(1) 
+                time.sleep(5) 
                 
                 summary = analyze_article(entry.title, entry.summary if 'summary' in entry else "")
                 
