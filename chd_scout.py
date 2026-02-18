@@ -31,7 +31,7 @@ TRIGGER_WORDS = [
 
 genai.configure(api_key=GOOGLE_API_KEY)
 # Using the Lite model because it is free and fast
-model = genai.GenerativeModel('gemini-2.0-flash-lite') 
+model = genai.GenerativeModel('gemini-flash-latest') 
 
 DB_NAME = "chd_intelligence.db"
 
