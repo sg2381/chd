@@ -9,12 +9,12 @@ import time
 import os
 
 # --- CONFIGURATION ---
-# We use os.environ.get to pull the secrets from GitHub
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 EMAIL_SENDER = os.environ.get("EMAIL_SENDER")
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER") 
 
+# 1. The Broad Search (What we ask Google News for)
 SEARCH_TERMS = [
     "Congenital Heart Disease launch", 
     "Congenital Heart Disease partnership",
@@ -23,13 +23,18 @@ SEARCH_TERMS = [
     "CHD non-profit announced"
 ]
 
-# Configure Google Gemini
+# 2. The Strict Filter (We only ask AI if the title has one of these)
+TRIGGER_WORDS = [
+    "launch", "new", "start", "found", "creat", "unveil", "partner", 
+    "allianc", "invest", "rais", "fund", "donat", "grant", "award"
+]
+
 genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel('gemini-2.0-flash-lite-001')
+# Using the Lite model because it is free and fast
+model = genai.GenerativeModel('gemini-2.0-flash-lite-preview-02-05') 
 
 DB_NAME = "chd_intelligence.db"
 
-# --- PART 1: THE DATABASE ---
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
@@ -54,40 +59,38 @@ def save_article(link, title):
     conn.commit()
     conn.close()
 
-# --- PART 2: THE INTELLIGENCE (GOOGLE GEMINI) ---
+def smart_filter(title):
+    """
+    Returns True if the title looks promising enough to waste an API credit on.
+    """
+    title_lower = title.lower()
+    # Check if any trigger word is in the title
+    if any(word in title_lower for word in TRIGGER_WORDS):
+        return True
+    return False
+
 def analyze_article(title, snippet):
     prompt = f"""
-    I am an investor looking for NEW organizations, foundations, alliances, or startups in the Congenital Heart Disease space.
-    
-    Look at this news headline and snippet: 
     Title: "{title}"
     Snippet: "{snippet}"
     
-    Task:
-    1. Decide if this announces a NEW entity, a NEW program launch, or a NEW investment/partnership.
-    2. Ignore general health advice, "awareness month" posts, or generic research papers.
+    Does this article announce a NEW organization, foundation, alliance, or startup related to Heart Disease? 
+    Ignore research papers, obituaries, and generic health advice.
     
-    If it is relevant, write a 1-sentence summary of what the new entity does.
-    If it is NOT relevant, reply with exactly "NO".
+    If YES, write a 1-sentence summary.
+    If NO, reply "NO".
     """
     
     try:
         response = model.generate_content(prompt)
         answer = response.text.strip()
-        
-        if answer == "NO" or "NO." in answer:
+        if "NO" in answer:
             return None
         return answer
     except Exception as e:
         print(f"Gemini Error: {e}")
-        # DEBUG: If model isn't found, print what IS available
-        if "404" in str(e):
-            print("Listing available models...")
-            for m in genai.list_models():
-                print(m.name)
-        return None
+        return "QUOTA_HIT" # Signal to stop
 
-# --- PART 3: THE REPORTER (EMAIL) ---
 def send_email(new_leads):
     if not new_leads:
         return
@@ -118,12 +121,15 @@ def send_email(new_leads):
     except Exception as e:
         print(f"Failed to send email: {e}")
 
-# --- PART 4: THE MAIN LOOP ---
 def run_scan():
     print(f"--- Starting Scan: {datetime.datetime.now()} ---")
     new_leads = []
+    quota_exhausted = False
 
     for term in SEARCH_TERMS:
+        if quota_exhausted:
+            break
+
         formatted_term = term.replace(" ", "%20")
         rss_url = f"https://news.google.com/rss/search?q={formatted_term}&hl=en-US&gl=US&ceid=US:en"
         feed = feedparser.parse(rss_url)
@@ -131,31 +137,43 @@ def run_scan():
         print(f"Checking term: {term} (Found {len(feed.entries)} articles)")
 
         for entry in feed.entries:
+            if quota_exhausted:
+                break
+
             if not article_exists(entry.link):
-                # We haven't seen this before. Ask Gemini.
-                # Introduce a small delay so Google doesn't think we are spamming
-                time.sleep(5) 
-                
-                summary = analyze_article(entry.title, entry.summary if 'summary' in entry else "")
-                
-                if summary:
-                    print(f"[MATCH] {entry.title}")
-                    new_leads.append({
-                        "title": entry.title,
-                        "link": entry.link,
-                        "summary": summary
-                    })
+                # STEP 1: Smart Filter (Don't use AI yet)
+                if smart_filter(entry.title):
+                    print(f"Analyzing: {entry.title}")
+                    
+                    # STEP 2: Ask AI
+                    time.sleep(10) # Slow down to 1 request every 10 seconds
+                    summary = analyze_article(entry.title, entry.summary if 'summary' in entry else "")
+                    
+                    if summary == "QUOTA_HIT":
+                        print("!!! QUOTA HIT. Stopping scan early and sending what we have.")
+                        quota_exhausted = True
+                        break
+                    
+                    if summary:
+                        print(f"[MATCH] {entry.title}")
+                        new_leads.append({
+                            "title": entry.title,
+                            "link": entry.link,
+                            "summary": summary
+                        })
+                    else:
+                        print(f"[NO MATCH] {entry.title}")
                 else:
-                    print(f"[SKIP] {entry.title}")
+                    # We skip it without asking AI, saving quota
+                    pass 
                 
+                # Save to DB so we don't check it again
                 save_article(entry.link, entry.title)
     
-    new_leads.append({
-        "title": "TEST: The Iron Man Heart Foundation",
-        "link": "https://google.com",
-        "summary": "This is a fake test summary. If you see this, your CHD Scout is fully operational!"
-    })
-    
+    # --- TEST BLOCK (Delete later) ---
+    # new_leads.append({"title": "Test Email", "link": "http://google.com", "summary": "Test Summary"})
+    # ---------------------------------
+
     if new_leads:
         send_email(new_leads)
     else:
