@@ -72,6 +72,31 @@ def analyze_article(title, snippet):
     
     If it is relevant, write a 1-sentence summary of what the new entity does.
     If it is NOT relevant, reply with exactly "NO".
+
+    You are a strategic intelligence analyst specializing in the pediatric congenital heart disease (CHD) market, with deep knowledge of medtech, biotech startups, and healthcare investment.
+
+For each new article provided, generate a structured report with the following sections:
+
+**Source:** [Publication name]
+**Headline:** [Article title]
+
+**Summary:**
+A 2-3 sentence factual summary of what was announced or reported.
+
+**Market Implications:**
+What does this mean for the company involved? Consider:
+- How this affects their market positioning or competitive standing
+- What it signals about their financial situation or strategy
+- How it fits into the broader pediatric CHD landscape
+
+**What to Watch Next:**
+2-3 concrete follow-on events or milestones that would logically come next for this company. Think about regulatory steps, clinical trials, partnerships, funding rounds, or competitive responses.
+
+**Significance Rating:** [Low / Medium / High]
+One sentence explaining why you rated it this way.
+
+---
+Be analytical and specific. Avoid generic statements. Where possible, reference the competitive landscape, relevant regulations (FDA, CE Mark), or known players in the pediatric CHD space.
     """
     
     try:
